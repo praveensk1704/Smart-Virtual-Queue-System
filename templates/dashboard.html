@@ -6,7 +6,7 @@
     <title>Smart Virtual Queue - Control Panel</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -68,18 +68,18 @@
                 </div>
 
                 <!-- Settings Panel -->
-                <div style="margin-top:16px; padding:18px; background:rgba(0,0,0,0.25); border-radius:14px; border:1px solid rgba(255,255,255,0.04); backdrop-filter:blur(8px);">
-                    <h3 style="color:#ffaa00; margin-bottom:12px; font-size:0.95rem; font-weight:600; letter-spacing:0.3px;">⚙️ System Settings</h3>
+                <div style="margin-top:18px; padding:20px; background:rgba(0,0,0,0.3); border-radius:16px; border:1px solid rgba(255,255,255,0.04); backdrop-filter:blur(12px);">
+                    <h3 style="font-family:'Orbitron',sans-serif; color:#ffaa00; margin-bottom:14px; font-size:0.78rem; font-weight:600; letter-spacing:2px; text-transform:uppercase;">⚙️ System Settings</h3>
                     <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
                         <div>
-                            <label style="display:block; color:#5a7290; font-size:0.8rem; margin-bottom:5px; font-weight:500;">Total Groups</label>
+                            <label style="display:block; color:#4a6280; font-size:0.75rem; margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">Total Groups</label>
                             <input type="number" id="cfg-groups" min="1" max="100" value="10"
-                                style="width:80px; padding:9px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#fff; text-align:center; font-size:1rem; font-weight:600; font-family:inherit; transition:border-color 0.3s;">
+                                style="width:80px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); color:#fff; text-align:center; font-family:'Orbitron',sans-serif; font-size:1rem; font-weight:600; transition:all 0.3s;">
                         </div>
                         <div>
-                            <label style="display:block; color:#5a7290; font-size:0.8rem; margin-bottom:5px; font-weight:500;">Members per Group</label>
+                            <label style="display:block; color:#4a6280; font-size:0.75rem; margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">Members per Group</label>
                             <input type="number" id="cfg-members" min="1" max="500" value="15"
-                                style="width:80px; padding:9px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#fff; text-align:center; font-size:1rem; font-weight:600; font-family:inherit; transition:border-color 0.3s;">
+                                style="width:80px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); color:#fff; text-align:center; font-family:'Orbitron',sans-serif; font-size:1rem; font-weight:600; transition:all 0.3s;">
                         </div>
                         <button class="btn btn-set" onclick="saveConfig()">💾 Save</button>
                     </div>
@@ -87,7 +87,7 @@
                 </div>
 
                 <!-- Group Grid -->
-                <h3 style="margin-top:16px; color:#5a7290; font-weight:600; font-size:0.92rem; letter-spacing:0.3px;">Group Overview</h3>
+                <h3 style="margin-top:18px; font-family:'Orbitron',sans-serif; color:#4a6280; font-weight:600; font-size:0.72rem; letter-spacing:2px; text-transform:uppercase;">Group Overview</h3>
                 <div class="group-grid" id="group-grid">
                     <!-- Filled by JS -->
                 </div>
