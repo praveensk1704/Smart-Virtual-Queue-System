@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Virtual Queue - Control Panel</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="static/style.css">
 </head>
 <body>
@@ -65,26 +68,26 @@
                 </div>
 
                 <!-- Settings Panel -->
-                <div style="margin-top:15px; padding:15px; background:rgba(0,0,0,0.2); border-radius:10px; border:1px solid rgba(255,255,255,0.05);">
-                    <h3 style="color:#ffaa00; margin-bottom:10px;">⚙️ System Settings</h3>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                <div style="margin-top:16px; padding:18px; background:rgba(0,0,0,0.25); border-radius:14px; border:1px solid rgba(255,255,255,0.04); backdrop-filter:blur(8px);">
+                    <h3 style="color:#ffaa00; margin-bottom:12px; font-size:0.95rem; font-weight:600; letter-spacing:0.3px;">⚙️ System Settings</h3>
+                    <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end;">
                         <div>
-                            <label style="display:block; color:#6688aa; font-size:0.8rem; margin-bottom:4px;">Total Groups</label>
+                            <label style="display:block; color:#5a7290; font-size:0.8rem; margin-bottom:5px; font-weight:500;">Total Groups</label>
                             <input type="number" id="cfg-groups" min="1" max="100" value="10"
-                                style="width:80px; padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#fff; text-align:center;">
+                                style="width:80px; padding:9px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#fff; text-align:center; font-size:1rem; font-weight:600; font-family:inherit; transition:border-color 0.3s;">
                         </div>
                         <div>
-                            <label style="display:block; color:#6688aa; font-size:0.8rem; margin-bottom:4px;">Members per Group</label>
+                            <label style="display:block; color:#5a7290; font-size:0.8rem; margin-bottom:5px; font-weight:500;">Members per Group</label>
                             <input type="number" id="cfg-members" min="1" max="500" value="15"
-                                style="width:80px; padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#fff; text-align:center;">
+                                style="width:80px; padding:9px; border-radius:10px; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#fff; text-align:center; font-size:1rem; font-weight:600; font-family:inherit; transition:border-color 0.3s;">
                         </div>
                         <button class="btn btn-set" onclick="saveConfig()">💾 Save</button>
                     </div>
-                    <div id="config-msg" style="margin-top:8px; font-size:0.85rem; color:#00ff88; display:none;"></div>
+                    <div id="config-msg" style="margin-top:10px; font-size:0.85rem; color:#00ff88; display:none;"></div>
                 </div>
 
                 <!-- Group Grid -->
-                <h3 style="margin-top:15px; color:#8899aa;">Group Overview</h3>
+                <h3 style="margin-top:16px; color:#5a7290; font-weight:600; font-size:0.92rem; letter-spacing:0.3px;">Group Overview</h3>
                 <div class="group-grid" id="group-grid">
                     <!-- Filled by JS -->
                 </div>
