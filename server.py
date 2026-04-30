@@ -20,11 +20,20 @@ from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 
 import database as db
 import face_engine
 
 app = FastAPI(title="Smart Virtual Queue - Crowd Control System")
+
+# Allow requests from any origin (GitHub Pages, phones, other devices)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Static files & templates
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

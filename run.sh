@@ -51,15 +51,54 @@ pip install --quiet face-recognition 2>/dev/null && echo "✅ face_recognition i
 echo ""
 echo "============================================================"
 echo "  🚀 Starting Server..."
-echo "  Open in browser: http://localhost:8000"
-echo ""
-echo "  Pages:"
-echo "    Dashboard:      http://localhost:8000/"
-echo "    Register User:  http://localhost:8000/register"
-echo "    Gate Simulator: http://localhost:8000/gate"
-echo ""
-echo "  Press Ctrl+C to stop the server"
+echo "  Local: http://localhost:8000"
 echo "============================================================"
 echo ""
 
-python3 server.py
+# Start FastAPI server in background
+python3 server.py &
+SERVER_PID=$!
+
+# Start Cloudflare quick tunnel to expose server publicly
+echo "🌐 Starting public tunnel (Cloudflare)..."
+rm -f /tmp/cf_tunnel.log
+cloudflared tunnel --url http://localhost:8000 --no-autoupdate 2>/tmp/cf_tunnel.log &
+CF_PID=$!
+
+# Wait for tunnel URL to appear (up to 30 seconds)
+TUNNEL_URL=""
+for i in $(seq 1 30); do
+    sleep 1
+    TUNNEL_URL=$(grep -o 'https://[a-zA-Z0-9-]*\.trycloudflare\.com' /tmp/cf_tunnel.log 2>/dev/null | head -1)
+    if [ -n "$TUNNEL_URL" ]; then
+        break
+    fi
+    printf "."
+done
+echo ""
+
+GITHUB_PAGES="https://praveensk1704.github.io/Smart-Virtual-Queue-System"
+
+if [ -n "$TUNNEL_URL" ]; then
+    echo ""
+    echo "============================================================"
+    echo "  ✅ TUNNEL ACTIVE — Share these links with users:"
+    echo ""
+    echo "  📝 Register:   ${GITHUB_PAGES}/register.html?api=${TUNNEL_URL}"
+    echo "  🚪 Gate:       ${GITHUB_PAGES}/gate.html?api=${TUNNEL_URL}"
+    echo "  📊 Dashboard:  ${GITHUB_PAGES}/index.html?api=${TUNNEL_URL}"
+    echo ""
+    echo "  🔗 Direct backend: ${TUNNEL_URL}"
+    echo "  💾 Images saved to: $(pwd)/face_images/"
+    echo "============================================================"
+else
+    echo "⚠️  Tunnel URL not found. Use local: http://localhost:8000"
+fi
+
+echo ""
+echo "  Press Ctrl+C to stop"
+echo ""
+
+# Keep running until Ctrl+C
+trap "kill $SERVER_PID $CF_PID 2>/dev/null; echo 'Server stopped.'; exit 0" INT TERM
+wait $SERVER_PID
