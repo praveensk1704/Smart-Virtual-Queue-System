@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gate Simulator - Smart Virtual Queue</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>🚦 Smart Virtual Queue - Crowd Control System</h1>
+            <nav>
+                <a href="/" class="nav-btn">Dashboard</a>
+                <a href="/register" class="nav-btn">Register User</a>
+                <a href="/gate" class="nav-btn active">Gate Simulator</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <div class="two-col">
+            <!-- Gate Camera -->
+            <section class="panel">
+                <h2>🚪 Entry Gate - Face Verification</h2>
+                <p class="subtitle">Simulates the embedded gate device. Scan face to verify entry.</p>
+
+                <div class="camera-container gate-camera">
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="canvas" style="display:none;"></canvas>
+                    <div class="scan-line" id="scan-line"></div>
+                </div>
+
+                <div class="camera-controls">
+                    <button class="btn btn-camera" id="btn-start" onclick="startCamera()">📷 Start Camera</button>
+                    <button class="btn btn-verify" id="btn-verify" onclick="verifyFace()" disabled>
+                        🔍 Scan & Verify
+                    </button>
+                </div>
+
+                <!-- Active Group Display -->
+                <div class="gate-info">
+                    <div class="now-serving">
+                        <span class="label">Now Serving:</span>
+                        <span class="group-display" id="active-group-display">--</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Gate Status -->
+            <section class="panel">
+                <h2>🚦 Gate Status</h2>
+
+                <div class="gate-status-display" id="gate-status">
+                    <div class="gate-visual idle" id="gate-visual">
+                        <div class="gate-icon">🚪</div>
+                        <div class="gate-text">STANDBY</div>
+                    </div>
+                </div>
+
+                <div class="verification-result" id="verify-result" style="display:none;">
+                    <!-- Filled by JS -->
+                </div>
+
+                <h3 style="margin-top: 20px;">Recent Scans</h3>
+                <div class="scan-history" id="scan-history">
+                    <p class="empty-msg">No scans yet. Use the camera to verify faces.</p>
+                </div>
+
+                <!-- Simulated Hardware Status -->
+                <div class="hardware-sim">
+                    <h3>🔧 Simulated Hardware</h3>
+                    <div class="hw-indicators">
+                        <div class="hw-item">
+                            <span class="hw-led green" id="led-green"></span>
+                            <span>Green LED</span>
+                        </div>
+                        <div class="hw-item">
+                            <span class="hw-led red" id="led-red"></span>
+                            <span>Red LED</span>
+                        </div>
+                        <div class="hw-item">
+                            <span class="hw-led" id="led-relay"></span>
+                            <span>Door Relay</span>
+                        </div>
+                        <div class="hw-item">
+                            <span class="hw-led" id="led-buzzer"></span>
+                            <span>Buzzer</span>
+                        </div>
+                    </div>
+                    <div class="hw-gpio" id="gpio-output">
+                        <code>GPIO: All LOW (standby)</code>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        let stream = null;
+        let scanHistory = [];
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: 'user' }
+                });
+                document.getElementById('video').srcObject = stream;
+                document.getElementById('btn-verify').disabled = false;
+                document.getElementById('btn-start').textContent = '📷 Camera Active';
+                document.getElementById('btn-start').disabled = true;
+            } catch (err) {
+                alert('Camera access denied: ' + err.message);
+            }
+        }
+
+        async function verifyFace() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg', 0.9);
+
+            // Show scanning animation
+            const btn = document.getElementById('btn-verify');
+            btn.disabled = true;
+            btn.textContent = '⏳ Scanning...';
+            document.getElementById('scan-line').classList.add('scanning');
+
+            // Simulate scan delay for visual effect
+            await new Promise(r => setTimeout(r, 800));
+
+            try {
+                const res = await fetch('/api/verify', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ image: imageData })
+                });
+                const data = await res.json();
+                showResult(data);
+            } catch (err) {
+                showResult({ verified: false, gate: 'CLOSED', reason: 'Server error: ' + err.message });
+            }
+
+            document.getElementById('scan-line').classList.remove('scanning');
+            btn.disabled = false;
+            btn.textContent = '🔍 Scan & Verify';
+        }
+
+        function showResult(data) {
+            const gateVisual = document.getElementById('gate-visual');
+            const resultDiv = document.getElementById('verify-result');
+            const gpioOutput = document.getElementById('gpio-output');
+
+            if (data.verified) {
+                // ACCESS GRANTED
+                gateVisual.className = 'gate-visual granted';
+                gateVisual.innerHTML = `
+                    <div class="gate-icon">🚪✅</div>
+                    <div class="gate-text">GATE OPEN</div>
+                `;
+                resultDiv.className = 'verification-result granted';
+                resultDiv.innerHTML = `
+                    <h3>✅ ACCESS GRANTED</h3>
+                    <p><strong>${data.user.name}</strong> — Group ${data.user.group}</p>
+                    <p>${data.message}</p>
+                `;
+
+                // Simulate hardware
+                setHardware('granted');
+                gpioOutput.innerHTML = `<code>GPIO23: HIGH → Relay ON → Gate OPEN\nGPIO24: HIGH → Green LED ON\nBuzzer: SHORT BEEP</code>`;
+
+                // Auto-close gate after 3 seconds
+                setTimeout(() => {
+                    gateVisual.className = 'gate-visual idle';
+                    gateVisual.innerHTML = '<div class="gate-icon">🚪</div><div class="gate-text">STANDBY</div>';
+                    setHardware('idle');
+                    gpioOutput.innerHTML = '<code>GPIO: All LOW (standby)</code>';
+                }, 3000);
+            } else {
+                // ACCESS DENIED
+                gateVisual.className = 'gate-visual denied';
+                gateVisual.innerHTML = `
+                    <div class="gate-icon">🚪❌</div>
+                    <div class="gate-text">GATE CLOSED</div>
+                `;
+                resultDiv.className = 'verification-result denied';
+                resultDiv.innerHTML = `
+                    <h3>❌ ACCESS DENIED</h3>
+                    ${data.user ? `<p><strong>${data.user.name}</strong> — Group ${data.user.group}</p>` : ''}
+                    <p>${data.reason}</p>
+                `;
+
+                setHardware('denied');
+                gpioOutput.innerHTML = `<code>GPIO23: LOW → Relay OFF → Gate CLOSED\nGPIO25: HIGH → Red LED ON\nBuzzer: LONG BEEP (denied)</code>`;
+
+                setTimeout(() => {
+                    gateVisual.className = 'gate-visual idle';
+                    gateVisual.innerHTML = '<div class="gate-icon">🚪</div><div class="gate-text">STANDBY</div>';
+                    setHardware('idle');
+                    gpioOutput.innerHTML = '<code>GPIO: All LOW (standby)</code>';
+                }, 3000);
+            }
+
+            resultDiv.style.display = 'block';
+
+            // Add to scan history
+            scanHistory.unshift({
+                time: new Date().toLocaleTimeString(),
+                name: data.user ? data.user.name : 'Unknown',
+                result: data.verified ? 'granted' : 'denied'
+            });
+            updateScanHistory();
+        }
+
+        function setHardware(state) {
+            const green = document.getElementById('led-green');
+            const red = document.getElementById('led-red');
+            const relay = document.getElementById('led-relay');
+            const buzzer = document.getElementById('led-buzzer');
+
+            green.classList.remove('on');
+            red.classList.remove('on');
+            relay.classList.remove('on');
+            buzzer.classList.remove('on');
+
+            if (state === 'granted') {
+                green.classList.add('on');
+                relay.classList.add('on');
+                buzzer.classList.add('on');
+            } else if (state === 'denied') {
+                red.classList.add('on');
+                buzzer.classList.add('on');
+            }
+        }
+
+        function updateScanHistory() {
+            const div = document.getElementById('scan-history');
+            div.innerHTML = scanHistory.slice(0, 10).map(s => `
+                <div class="scan-item ${s.result}">
+                    <span>${s.result === 'granted' ? '✅' : '❌'}</span>
+                    <span>${s.name}</span>
+                    <span>${s.result.toUpperCase()}</span>
+                    <span>${s.time}</span>
+                </div>
+            `).join('');
+        }
+
+        async function updateActiveGroup() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                document.getElementById('active-group-display').textContent = 
+                    data.active_group > 0 ? `Group ${data.active_group}` : 'None';
+            } catch (e) {}
+        }
+
+        updateActiveGroup();
+        setInterval(updateActiveGroup, 2000);
+    </script>
+</body>
+</html>

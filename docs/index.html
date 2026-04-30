@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Virtual Queue - Control Panel</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>🚦 Smart Virtual Queue - Crowd Control System</h1>
+            <nav>
+                <a href="index.html" class="nav-btn active">Dashboard</a>
+                <a href="register.html" class="nav-btn">Register User</a>
+                <a href="gate.html" class="nav-btn">Gate Simulator</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <!-- Stats Cards -->
+        <section class="stats-row" id="stats-row">
+            <div class="stat-card">
+                <div class="stat-number" id="stat-users">0</div>
+                <div class="stat-label">Registered Users</div>
+            </div>
+            <div class="stat-card highlight">
+                <div class="stat-number" id="stat-active-group">--</div>
+                <div class="stat-label">Active Group</div>
+            </div>
+            <div class="stat-card success">
+                <div class="stat-number" id="stat-entries">0</div>
+                <div class="stat-label">Entries Granted</div>
+            </div>
+            <div class="stat-card danger">
+                <div class="stat-number" id="stat-denied">0</div>
+                <div class="stat-label">Entries Denied</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="stat-groups">0</div>
+                <div class="stat-label">Groups Used</div>
+            </div>
+        </section>
+
+        <div class="two-col">
+            <!-- Group Control Panel -->
+            <section class="panel">
+                <h2>📋 Group Control</h2>
+                <div class="group-control">
+                    <div class="active-group-display">
+                        <span class="label">Now Serving:</span>
+                        <span class="group-num" id="current-group-display">--</span>
+                    </div>
+                    <div class="group-actions">
+                        <button class="btn btn-prev" onclick="changeGroup(-1)">◀ Previous</button>
+                        <button class="btn btn-next" onclick="changeGroup(1)">Next ▶</button>
+                        <button class="btn btn-stop" onclick="setGroup(0)">⏹ Stop</button>
+                    </div>
+                    <div class="group-selector">
+                        <label>Jump to Group:</label>
+                        <input type="number" id="group-input" min="0" max="35" value="1">
+                        <button class="btn btn-set" onclick="setGroupFromInput()">Set</button>
+                    </div>
+                </div>
+
+                <!-- Group Grid -->
+                <div class="group-grid" id="group-grid">
+                    <!-- Filled by JS -->
+                </div>
+            </section>
+
+            <!-- Right Column -->
+            <section class="panel">
+                <h2>👥 Registered Users</h2>
+                <div class="user-list" id="user-list">
+                    <p class="empty-msg">No users registered yet. <a href="register.html">Register now</a></p>
+                </div>
+
+                <h2 style="margin-top:20px">📜 Gate Access Log</h2>
+                <div class="log-list" id="gate-log">
+                    <p class="empty-msg">No gate events yet.</p>
+                </div>
+
+                <div style="margin-top:15px; text-align:right;">
+                    <button class="btn btn-danger" onclick="resetSystem()">🗑️ Reset System</button>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        // ── Change this to your deployed backend URL ──────────────────────────
+        const API_BASE_URL = 'http://localhost:8000';
+        // ─────────────────────────────────────────────────────────────────────
+
+        let currentActiveGroup = 0;
+
+        async function fetchStats() {
+            const res = await fetch(`${API_BASE_URL}/api/stats`);
+            const data = await res.json();
+            document.getElementById('stat-users').textContent = data.total_users;
+            document.getElementById('stat-active-group').textContent = data.active_group || '--';
+            document.getElementById('stat-entries').textContent = data.total_entries;
+            document.getElementById('stat-denied').textContent = data.total_denied;
+            document.getElementById('stat-groups').textContent = data.groups_with_members;
+            currentActiveGroup = data.active_group;
+            document.getElementById('current-group-display').textContent = 
+                data.active_group > 0 ? `Group ${data.active_group}` : 'None';
+        }
+
+        async function fetchGroups() {
+            const res = await fetch(`${API_BASE_URL}/api/groups`);
+            const data = await res.json();
+            const grid = document.getElementById('group-grid');
+            grid.innerHTML = '';
+            
+            const activeGroups = data.groups.filter(g => g.member_count > 0);
+            
+            if (activeGroups.length === 0) {
+                grid.innerHTML = '<p class="empty-msg">No groups with members yet.</p>';
+                return;
+            }
+
+            activeGroups.forEach(g => {
+                const div = document.createElement('div');
+                div.className = `group-cell ${g.status === 'active' ? 'active' : ''} ${g.member_count > 0 ? 'has-members' : ''}`;
+                div.innerHTML = `
+                    <div class="group-num">G${g.group_number}</div>
+                    <div class="group-count">${g.member_count}/${g.max_members}</div>
+                    <div class="group-status">${g.status}</div>
+                `;
+                div.onclick = () => setGroup(g.group_number);
+                grid.appendChild(div);
+            });
+        }
+
+        async function fetchUsers() {
+            const res = await fetch(`${API_BASE_URL}/api/users`);
+            const data = await res.json();
+            const list = document.getElementById('user-list');
+            
+            if (data.users.length === 0) {
+                list.innerHTML = '<p class="empty-msg">No users registered yet. <a href="register.html">Register now</a></p>';
+                return;
+            }
+
+            list.innerHTML = data.users.map(u => `
+                <div class="user-item ${u.group_number === currentActiveGroup ? 'active-user' : ''}">
+                    <span class="user-name">👤 ${u.name}</span>
+                    <span class="user-group">Group ${u.group_number}</span>
+                    <span class="user-status ${u.group_number === currentActiveGroup ? 'status-active' : 'status-waiting'}">
+                        ${u.group_number === currentActiveGroup ? '✅ ACTIVE' : '⏳ Waiting'}
+                    </span>
+                </div>
+            `).join('');
+        }
+
+        async function fetchLogs() {
+            const res = await fetch(`${API_BASE_URL}/api/gate_logs`);
+            const data = await res.json();
+            const list = document.getElementById('gate-log');
+            
+            if (data.logs.length === 0) {
+                list.innerHTML = '<p class="empty-msg">No gate events yet.</p>';
+                return;
+            }
+
+            list.innerHTML = data.logs.slice(0, 20).map(l => `
+                <div class="log-item ${l.result}">
+                    <span class="log-icon">${l.result === 'granted' ? '✅' : '❌'}</span>
+                    <span class="log-name">${l.user_name || 'Unknown'}</span>
+                    <span class="log-group">${l.group_number ? 'G' + l.group_number : '--'}</span>
+                    <span class="log-result">${l.result.toUpperCase()}</span>
+                    <span class="log-time">${new Date(l.timestamp).toLocaleTimeString()}</span>
+                </div>
+            `).join('');
+        }
+
+        async function setGroup(num) {
+            await fetch(`${API_BASE_URL}/api/set_active_group`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({group_number: num})
+            });
+            refreshAll();
+        }
+
+        function setGroupFromInput() {
+            const num = parseInt(document.getElementById('group-input').value) || 0;
+            setGroup(num);
+        }
+
+        function changeGroup(delta) {
+            let newGroup = currentActiveGroup + delta;
+            if (newGroup < 0) newGroup = 35;
+            if (newGroup > 35) newGroup = 0;
+            setGroup(newGroup);
+        }
+
+        async function resetSystem() {
+            if (!confirm('Reset all users, groups, and logs? This cannot be undone.')) return;
+            await fetch(`${API_BASE_URL}/api/reset`, {method: 'POST'});
+            refreshAll();
+        }
+
+        function refreshAll() {
+            fetchStats();
+            fetchGroups();
+            fetchUsers();
+            fetchLogs();
+        }
+
+        // Initial load + auto-refresh every 2 seconds
+        refreshAll();
+        setInterval(refreshAll, 2000);
+    </script>
+</body>
+</html>

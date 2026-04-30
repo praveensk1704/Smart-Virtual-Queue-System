@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register User - Smart Virtual Queue</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>🚦 Smart Virtual Queue - Crowd Control System</h1>
+            <nav>
+                <a href="/" class="nav-btn">Dashboard</a>
+                <a href="/register" class="nav-btn active">Register User</a>
+                <a href="/gate" class="nav-btn">Gate Simulator</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section class="panel register-panel">
+            <h2>📝 User Registration</h2>
+            <p class="subtitle">Capture face via webcam to register a new user. The system will auto-assign a group.</p>
+
+            <div class="register-layout">
+                <div class="camera-section">
+                    <div class="camera-container">
+                        <video id="video" autoplay playsinline></video>
+                        <canvas id="canvas" style="display:none;"></canvas>
+                        <div class="camera-overlay" id="camera-overlay">
+                            <div class="face-guide"></div>
+                            <p>Position face within the frame</p>
+                        </div>
+                    </div>
+                    <div class="camera-controls">
+                        <button class="btn btn-camera" id="btn-start-camera" onclick="startCamera()">📷 Start Camera</button>
+                        <button class="btn btn-capture" id="btn-capture" onclick="capturePhoto()" disabled>📸 Capture Face</button>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <div class="captured-preview" id="captured-preview">
+                        <p class="empty-msg">No photo captured yet</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="user-name">Full Name:</label>
+                        <input type="text" id="user-name" placeholder="Enter user's full name" maxlength="100">
+                    </div>
+
+                    <button class="btn btn-register" id="btn-register" onclick="registerUser()" disabled>
+                        ✅ Register User
+                    </button>
+
+                    <div id="register-result" class="result-box" style="display:none;"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        let stream = null;
+        let capturedImage = null;
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 640, height: 480, facingMode: 'user' }
+                });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                document.getElementById('btn-capture').disabled = false;
+                document.getElementById('btn-start-camera').textContent = '📷 Camera Active';
+                document.getElementById('btn-start-camera').disabled = true;
+                document.getElementById('camera-overlay').style.display = 'flex';
+            } catch (err) {
+                alert('Camera access denied or not available. Error: ' + err.message);
+            }
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
+            capturedImage = canvas.toDataURL('image/jpeg', 0.9);
+            
+            // Show preview
+            const preview = document.getElementById('captured-preview');
+            preview.innerHTML = `<img src="${capturedImage}" alt="Captured face">`;
+            
+            document.getElementById('btn-register').disabled = false;
+        }
+
+        async function registerUser() {
+            const name = document.getElementById('user-name').value.trim();
+            if (!name) {
+                alert('Please enter user name');
+                return;
+            }
+            if (!capturedImage) {
+                alert('Please capture a face photo first');
+                return;
+            }
+
+            const btn = document.getElementById('btn-register');
+            btn.disabled = true;
+            btn.textContent = '⏳ Registering...';
+
+            const resultBox = document.getElementById('register-result');
+
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name: name, image: capturedImage })
+                });
+                const data = await res.json();
+
+                if (data.success) {
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = `
+                        <h3>✅ Registration Successful!</h3>
+                        <p><strong>Name:</strong> ${data.user.name}</p>
+                        <p><strong>User ID:</strong> ${data.user.user_id}</p>
+                        <p><strong>Assigned Group:</strong> Group ${data.user.group_number}</p>
+                        <p class="msg">${data.message}</p>
+                    `;
+                    // Reset form
+                    document.getElementById('user-name').value = '';
+                    capturedImage = null;
+                    document.getElementById('captured-preview').innerHTML = '<p class="empty-msg">No photo captured yet</p>';
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `<h3>❌ Registration Failed</h3><p>${data.error}</p>`;
+                }
+            } catch (err) {
+                resultBox.className = 'result-box error';
+                resultBox.innerHTML = `<h3>❌ Error</h3><p>${err.message}</p>`;
+            }
+
+            resultBox.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = '✅ Register User';
+        }
+    </script>
+</body>
+</html>
