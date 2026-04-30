@@ -89,84 +89,96 @@
         </div>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        // ── Change this to your deployed backend URL ──────────────────────────
-        const API_BASE_URL = 'http://localhost:8000';
-        // ─────────────────────────────────────────────────────────────────────
+        // ── CONFIG: Fill in your Supabase credentials ──────────────────────
+        const SUPABASE_URL      = 'https://YOUR_PROJECT_ID.supabase.co';
+        const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+        // ───────────────────────────────────────────────────────────────────
 
+        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let currentActiveGroup = 0;
 
         async function fetchStats() {
-            const res = await fetch(`${API_BASE_URL}/api/stats`);
-            const data = await res.json();
-            document.getElementById('stat-users').textContent = data.total_users;
-            document.getElementById('stat-active-group').textContent = data.active_group || '--';
-            document.getElementById('stat-entries').textContent = data.total_entries;
-            document.getElementById('stat-denied').textContent = data.total_denied;
-            document.getElementById('stat-groups').textContent = data.groups_with_members;
-            currentActiveGroup = data.active_group;
-            document.getElementById('current-group-display').textContent = 
-                data.active_group > 0 ? `Group ${data.active_group}` : 'None';
+            const [{ data: users }, { data: state }, { data: logs }] = await Promise.all([
+                db.from('users').select('group_number'),
+                db.from('system_state').select('active_group').eq('id', 1).single(),
+                db.from('gate_logs').select('result')
+            ]);
+            const active = state?.active_group || 0;
+            currentActiveGroup = active;
+            const groupsUsed = new Set((users || []).map(u => u.group_number)).size;
+            const entries = (logs || []).filter(l => l.result === 'granted').length;
+            const denied  = (logs || []).filter(l => l.result === 'denied').length;
+            document.getElementById('stat-users').textContent = (users || []).length;
+            document.getElementById('stat-active-group').textContent = active || '--';
+            document.getElementById('stat-entries').textContent = entries;
+            document.getElementById('stat-denied').textContent = denied;
+            document.getElementById('stat-groups').textContent = groupsUsed;
+            document.getElementById('current-group-display').textContent =
+                active > 0 ? `Group ${active}` : 'None';
         }
 
         async function fetchGroups() {
-            const res = await fetch(`${API_BASE_URL}/api/groups`);
-            const data = await res.json();
+            const [{ data: users }, { data: state }] = await Promise.all([
+                db.from('users').select('group_number'),
+                db.from('system_state').select('active_group').eq('id', 1).single()
+            ]);
+            const active = state?.active_group || 0;
+            const counts = {};
+            (users || []).forEach(u => { counts[u.group_number] = (counts[u.group_number] || 0) + 1; });
             const grid = document.getElementById('group-grid');
             grid.innerHTML = '';
-            
-            const activeGroups = data.groups.filter(g => g.member_count > 0);
-            
-            if (activeGroups.length === 0) {
+            const nums = Object.keys(counts).map(Number).sort((a, b) => a - b);
+            if (nums.length === 0) {
                 grid.innerHTML = '<p class="empty-msg">No groups with members yet.</p>';
                 return;
             }
-
-            activeGroups.forEach(g => {
+            nums.forEach(g => {
                 const div = document.createElement('div');
-                div.className = `group-cell ${g.status === 'active' ? 'active' : ''} ${g.member_count > 0 ? 'has-members' : ''}`;
+                div.className = `group-cell has-members ${g === active ? 'active' : ''}`;
                 div.innerHTML = `
-                    <div class="group-num">G${g.group_number}</div>
-                    <div class="group-count">${g.member_count}/${g.max_members}</div>
-                    <div class="group-status">${g.status}</div>
+                    <div class="group-num">G${g}</div>
+                    <div class="group-count">${counts[g]}/15</div>
+                    <div class="group-status">${g === active ? 'active' : 'waiting'}</div>
                 `;
-                div.onclick = () => setGroup(g.group_number);
+                div.onclick = () => setGroup(g);
                 grid.appendChild(div);
             });
         }
 
         async function fetchUsers() {
-            const res = await fetch(`${API_BASE_URL}/api/users`);
-            const data = await res.json();
+            const [{ data: users }, { data: state }] = await Promise.all([
+                db.from('users').select('*').order('created_at', { ascending: true }),
+                db.from('system_state').select('active_group').eq('id', 1).single()
+            ]);
+            const active = state?.active_group || 0;
             const list = document.getElementById('user-list');
-            
-            if (data.users.length === 0) {
+            if (!users || users.length === 0) {
                 list.innerHTML = '<p class="empty-msg">No users registered yet. <a href="register.html">Register now</a></p>';
                 return;
             }
-
-            list.innerHTML = data.users.map(u => `
-                <div class="user-item ${u.group_number === currentActiveGroup ? 'active-user' : ''}">
-                    <span class="user-name">👤 ${u.name}</span>
+            list.innerHTML = users.map(u => `
+                <div class="user-item ${u.group_number === active ? 'active-user' : ''}">
+                    ${u.image_url ? `<img src="${u.image_url}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;margin-right:8px;">` : '<span style="margin-right:8px;">👤</span>'}
+                    <span class="user-name">${u.name}</span>
                     <span class="user-group">Group ${u.group_number}</span>
-                    <span class="user-status ${u.group_number === currentActiveGroup ? 'status-active' : 'status-waiting'}">
-                        ${u.group_number === currentActiveGroup ? '✅ ACTIVE' : '⏳ Waiting'}
+                    <span class="user-status ${u.group_number === active ? 'status-active' : 'status-waiting'}">
+                        ${u.group_number === active ? '✅ ACTIVE' : '⏳ Waiting'}
                     </span>
                 </div>
             `).join('');
         }
 
         async function fetchLogs() {
-            const res = await fetch(`${API_BASE_URL}/api/gate_logs`);
-            const data = await res.json();
+            const { data: logs } = await db.from('gate_logs').select('*')
+                .order('timestamp', { ascending: false }).limit(20);
             const list = document.getElementById('gate-log');
-            
-            if (data.logs.length === 0) {
+            if (!logs || logs.length === 0) {
                 list.innerHTML = '<p class="empty-msg">No gate events yet.</p>';
                 return;
             }
-
-            list.innerHTML = data.logs.slice(0, 20).map(l => `
+            list.innerHTML = logs.map(l => `
                 <div class="log-item ${l.result}">
                     <span class="log-icon">${l.result === 'granted' ? '✅' : '❌'}</span>
                     <span class="log-name">${l.user_name || 'Unknown'}</span>
@@ -178,42 +190,35 @@
         }
 
         async function setGroup(num) {
-            await fetch(`${API_BASE_URL}/api/set_active_group`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({group_number: num})
-            });
+            await db.from('system_state').update({ active_group: num }).eq('id', 1);
             refreshAll();
         }
 
         function setGroupFromInput() {
-            const num = parseInt(document.getElementById('group-input').value) || 0;
-            setGroup(num);
+            setGroup(parseInt(document.getElementById('group-input').value) || 0);
         }
 
         function changeGroup(delta) {
-            let newGroup = currentActiveGroup + delta;
-            if (newGroup < 0) newGroup = 35;
-            if (newGroup > 35) newGroup = 0;
-            setGroup(newGroup);
+            let g = currentActiveGroup + delta;
+            if (g < 0) g = 35;
+            if (g > 35) g = 0;
+            setGroup(g);
         }
 
         async function resetSystem() {
             if (!confirm('Reset all users, groups, and logs? This cannot be undone.')) return;
-            await fetch(`${API_BASE_URL}/api/reset`, {method: 'POST'});
+            await Promise.all([
+                db.from('users').delete().gte('id', 0),
+                db.from('gate_logs').delete().gte('id', 0),
+                db.from('system_state').update({ active_group: 0 }).eq('id', 1)
+            ]);
             refreshAll();
         }
 
-        function refreshAll() {
-            fetchStats();
-            fetchGroups();
-            fetchUsers();
-            fetchLogs();
-        }
+        function refreshAll() { fetchStats(); fetchGroups(); fetchUsers(); fetchLogs(); }
 
-        // Initial load + auto-refresh every 2 seconds
         refreshAll();
-        setInterval(refreshAll, 2000);
+        setInterval(refreshAll, 3000);
     </script>
 </body>
 </html>

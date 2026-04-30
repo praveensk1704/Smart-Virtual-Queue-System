@@ -33,10 +33,16 @@
 
                 <div class="camera-controls">
                     <button class="btn btn-camera" id="btn-start" onclick="startCamera()">📷 Start Camera</button>
-                    <button class="btn btn-verify" id="btn-verify" onclick="verifyFace()" disabled>
-                        🔍 Scan & Verify
-                    </button>
+                    <button class="btn btn-capture" id="btn-capture" onclick="captureSnapshot()" disabled>📸 Capture</button>
                 </div>
+                <div style="margin-top:12px;">
+                    <label style="display:block;color:#6688aa;margin-bottom:5px;font-size:0.9rem;">Your Name:</label>
+                    <input type="text" id="checkin-name" placeholder="Enter your name to check in"
+                        style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.05);color:#fff;font-size:1rem;">
+                </div>
+                <button class="btn btn-verify" onclick="checkIn()" style="width:100%;margin-top:10px;">
+                    🔍 Check In
+                </button>
 
                 <!-- Active Group Display -->
                 <div class="gate-info">
@@ -96,11 +102,14 @@
         </div>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        // ── Change this to your deployed backend URL ──────────────────────────
-        const API_BASE_URL = 'http://localhost:8000';
-        // ─────────────────────────────────────────────────────────────────────
+        // ── CONFIG: Fill in your Supabase credentials ──────────────────────
+        const SUPABASE_URL      = 'https://YOUR_PROJECT_ID.supabase.co';
+        const SUPABASE_ANON_KEY = 'YOUR_ANON_KEY';
+        // ───────────────────────────────────────────────────────────────────
 
+        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let stream = null;
         let scanHistory = [];
 
@@ -110,7 +119,7 @@
                     video: { width: 640, height: 480, facingMode: 'user' }
                 });
                 document.getElementById('video').srcObject = stream;
-                document.getElementById('btn-verify').disabled = false;
+                document.getElementById('btn-capture').disabled = false;
                 document.getElementById('btn-start').textContent = '📷 Camera Active';
                 document.getElementById('btn-start').disabled = true;
             } catch (err) {
@@ -118,36 +127,54 @@
             }
         }
 
-        async function verifyFace() {
+        function captureSnapshot() {
             const video = document.getElementById('video');
             const canvas = document.getElementById('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0);
-            const imageData = canvas.toDataURL('image/jpeg', 0.9);
+        }
 
-            const btn = document.getElementById('btn-verify');
-            btn.disabled = true;
-            btn.textContent = '⏳ Scanning...';
-            document.getElementById('scan-line').classList.add('scanning');
+        async function checkIn() {
+            const name = document.getElementById('checkin-name').value.trim();
+            if (!name) { alert('Please enter your name'); return; }
 
-            await new Promise(r => setTimeout(r, 800));
+            const gateVisual = document.getElementById('gate-visual');
+            gateVisual.className = 'gate-visual idle';
+            gateVisual.innerHTML = '<div class="gate-icon">⏳</div><div class="gate-text">CHECKING...</div>';
 
             try {
-                const res = await fetch(`${API_BASE_URL}/api/verify`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ image: imageData })
-                });
-                const data = await res.json();
-                showResult(data);
-            } catch (err) {
-                showResult({ verified: false, gate: 'CLOSED', reason: 'Server error: ' + err.message });
-            }
+                const [{ data: users }, { data: state }] = await Promise.all([
+                    db.from('users').select('*').ilike('name', name).limit(1),
+                    db.from('system_state').select('active_group').eq('id', 1).single()
+                ]);
+                const active = state?.active_group || 0;
 
-            document.getElementById('scan-line').classList.remove('scanning');
-            btn.disabled = false;
-            btn.textContent = '🔍 Scan & Verify';
+                if (!users || users.length === 0) {
+                    showResult({ verified: false, reason: 'User not registered. Please register first.' });
+                } else {
+                    const user = users[0];
+                    const granted = user.group_number === active && active > 0;
+                    await db.from('gate_logs').insert({
+                        user_name: user.name,
+                        group_number: user.group_number,
+                        result: granted ? 'granted' : 'denied'
+                    });
+                    if (granted) {
+                        showResult({ verified: true, user: { name: user.name, group: user.group_number }, message: 'Group is active. Welcome!' });
+                    } else {
+                        showResult({
+                            verified: false,
+                            user: { name: user.name, group: user.group_number },
+                            reason: active > 0
+                                ? `Your group (${user.group_number}) is not active. Currently serving Group ${active}.`
+                                : 'No group is currently active. Please wait.'
+                        });
+                    }
+                }
+            } catch (err) {
+                showResult({ verified: false, reason: 'Error: ' + err.message });
+            }
         }
 
         function showResult(data) {
@@ -246,15 +273,14 @@
 
         async function updateActiveGroup() {
             try {
-                const res = await fetch(`${API_BASE_URL}/api/stats`);
-                const data = await res.json();
-                document.getElementById('active-group-display').textContent = 
-                    data.active_group > 0 ? `Group ${data.active_group}` : 'None';
+                const { data } = await db.from('system_state').select('active_group').eq('id', 1).single();
+                document.getElementById('active-group-display').textContent =
+                    data?.active_group > 0 ? `Group ${data.active_group}` : 'None';
             } catch (e) {}
         }
 
         updateActiveGroup();
-        setInterval(updateActiveGroup, 2000);
+        setInterval(updateActiveGroup, 3000);
     </script>
 </body>
 </html>
