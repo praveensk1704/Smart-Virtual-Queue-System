@@ -62,7 +62,7 @@ SERVER_PID=$!
 # Start Cloudflare quick tunnel to expose server publicly
 echo "🌐 Starting public tunnel (Cloudflare)..."
 rm -f /tmp/cf_tunnel.log
-cloudflared tunnel --url http://localhost:8000 --no-autoupdate 2>/tmp/cf_tunnel.log &
+cloudflared tunnel --url http://localhost:8000 --no-autoupdate --protocol http2 > /tmp/cf_tunnel.log 2>&1 &
 CF_PID=$!
 
 # Wait for tunnel URL to appear (up to 30 seconds)
