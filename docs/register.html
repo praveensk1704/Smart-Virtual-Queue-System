@@ -60,9 +60,23 @@
     </main>
 
     <script>
-        // ── Change this to your deployed backend URL ──────────────────────────
-        const API_BASE_URL = 'http://localhost:8000';
-        // ─────────────────────────────────────────────────────────────────────
+        function getApiBaseUrl() {
+            const params = new URLSearchParams(window.location.search);
+            const queryUrl = params.get('api');
+            if (queryUrl) {
+                localStorage.setItem('API_BASE_URL', queryUrl);
+                return queryUrl.replace(/\/$/, '');
+            }
+
+            const savedUrl = localStorage.getItem('API_BASE_URL');
+            if (savedUrl) {
+                return savedUrl.replace(/\/$/, '');
+            }
+
+            return window.location.origin;
+        }
+
+        const API_BASE_URL = getApiBaseUrl();
 
         let stream = null;
         let capturedImage = null;
