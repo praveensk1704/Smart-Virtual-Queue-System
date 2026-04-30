@@ -59,16 +59,11 @@
         </section>
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script>
-        // ── CONFIG: Fill in your credentials ───────────────────────────────
-        const SUPABASE_URL             = 'https://YOUR_PROJECT_ID.supabase.co';
-        const SUPABASE_ANON_KEY        = 'YOUR_ANON_KEY';
-        const CLOUDINARY_CLOUD_NAME    = 'YOUR_CLOUD_NAME';
-        const CLOUDINARY_UPLOAD_PRESET = 'YOUR_UPLOAD_PRESET'; // unsigned preset
-        // ───────────────────────────────────────────────────────────────────
+        // ── Change this to your deployed backend URL ──────────────────────────
+        const API_BASE_URL = 'http://localhost:8000';
+        // ─────────────────────────────────────────────────────────────────────
 
-        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         let stream = null;
         let capturedImage = null;
 
@@ -93,70 +88,58 @@
             const canvas = document.getElementById('canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
-            canvas.getContext('2d').drawImage(video, 0, 0);
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            
             capturedImage = canvas.toDataURL('image/jpeg', 0.9);
-            document.getElementById('captured-preview').innerHTML =
-                `<img src="${capturedImage}" alt="Captured face">`;
+            
+            const preview = document.getElementById('captured-preview');
+            preview.innerHTML = `<img src="${capturedImage}" alt="Captured face">`;
+            
             document.getElementById('btn-register').disabled = false;
-        }
-
-        async function assignGroup() {
-            const { data: users } = await db.from('users').select('group_number');
-            const counts = {};
-            (users || []).forEach(u => { counts[u.group_number] = (counts[u.group_number] || 0) + 1; });
-            for (let g = 1; g <= 35; g++) {
-                if ((counts[g] || 0) < 15) return g;
-            }
-            return 36;
-        }
-
-        async function uploadToCloudinary(base64Image) {
-            const formData = new FormData();
-            formData.append('file', base64Image);
-            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-            const res = await fetch(
-                `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-                { method: 'POST', body: formData }
-            );
-            const data = await res.json();
-            if (data.error) throw new Error(data.error.message);
-            return data.secure_url;
         }
 
         async function registerUser() {
             const name = document.getElementById('user-name').value.trim();
-            if (!name) { alert('Please enter user name'); return; }
-            if (!capturedImage) { alert('Please capture a face photo first'); return; }
+            if (!name) {
+                alert('Please enter user name');
+                return;
+            }
+            if (!capturedImage) {
+                alert('Please capture a face photo first');
+                return;
+            }
 
             const btn = document.getElementById('btn-register');
             btn.disabled = true;
+            btn.textContent = '⏳ Registering...';
+
             const resultBox = document.getElementById('register-result');
 
             try {
-                btn.textContent = '⏳ Uploading photo...';
-                const imageUrl = await uploadToCloudinary(capturedImage);
+                const res = await fetch(`${API_BASE_URL}/api/register`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name: name, image: capturedImage })
+                });
+                const data = await res.json();
 
-                btn.textContent = '⏳ Assigning group...';
-                const groupNumber = await assignGroup();
-
-                btn.textContent = '⏳ Saving user...';
-                const { data, error } = await db.from('users')
-                    .insert({ name, group_number: groupNumber, image_url: imageUrl })
-                    .select().single();
-                if (error) throw new Error(error.message);
-
-                resultBox.className = 'result-box success';
-                resultBox.innerHTML = `
-                    <h3>✅ Registration Successful!</h3>
-                    <p><strong>Name:</strong> ${data.name}</p>
-                    <p><strong>User ID:</strong> ${data.id}</p>
-                    <p><strong>Assigned Group:</strong> Group ${data.group_number}</p>
-                    <img src="${data.image_url}" style="width:80px;height:80px;border-radius:50%;object-fit:cover;margin-top:10px;">
-                `;
-                document.getElementById('user-name').value = '';
-                capturedImage = null;
-                document.getElementById('captured-preview').innerHTML = '<p class="empty-msg">No photo captured yet</p>';
-                document.getElementById('btn-register').disabled = true;
+                if (data.success) {
+                    resultBox.className = 'result-box success';
+                    resultBox.innerHTML = `
+                        <h3>✅ Registration Successful!</h3>
+                        <p><strong>Name:</strong> ${data.user.name}</p>
+                        <p><strong>User ID:</strong> ${data.user.user_id}</p>
+                        <p><strong>Assigned Group:</strong> Group ${data.user.group_number}</p>
+                        <p class="msg">${data.message}</p>
+                    `;
+                    document.getElementById('user-name').value = '';
+                    capturedImage = null;
+                    document.getElementById('captured-preview').innerHTML = '<p class="empty-msg">No photo captured yet</p>';
+                } else {
+                    resultBox.className = 'result-box error';
+                    resultBox.innerHTML = `<h3>❌ Registration Failed</h3><p>${data.error}</p>`;
+                }
             } catch (err) {
                 resultBox.className = 'result-box error';
                 resultBox.innerHTML = `<h3>❌ Error</h3><p>${err.message}</p>`;

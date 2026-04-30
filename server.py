@@ -15,6 +15,7 @@ Endpoints:
 """
 
 import os
+import base64
 from fastapi import FastAPI, Request, Form, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +28,9 @@ app = FastAPI(title="Smart Virtual Queue - Crowd Control System")
 
 # Static files & templates
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+FACE_IMAGES_DIR = os.path.join(BASE_DIR, "face_images")
+os.makedirs(FACE_IMAGES_DIR, exist_ok=True)
+
 app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
@@ -87,8 +91,21 @@ async def api_register(request: Request):
             status_code=409,
         )
 
+    # Save the face image to local disk
+    image_path = None
+    try:
+        raw_b64 = image_b64.split(",")[1] if "," in image_b64 else image_b64
+        img_bytes = base64.b64decode(raw_b64)
+        safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+        filename = f"{safe_name}_{int(__import__('time').time())}.jpg"
+        image_path = os.path.join(FACE_IMAGES_DIR, filename)
+        with open(image_path, "wb") as f:
+            f.write(img_bytes)
+    except Exception as e:
+        image_path = None  # Don't block registration if image save fails
+
     # Register user
-    result, err = db.register_user(name, encoding)
+    result, err = db.register_user(name, encoding, image_path)
     if err:
         return JSONResponse({"error": err}, status_code=400)
 

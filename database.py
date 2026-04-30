@@ -28,11 +28,18 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             face_encoding TEXT,
+            image_path TEXT,
             group_number INTEGER NOT NULL,
             registered_at TEXT NOT NULL,
             status TEXT DEFAULT 'waiting'
         )
     """)
+
+    # Add image_path column to existing databases (migration)
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN image_path TEXT")
+    except Exception:
+        pass  # Column already exists
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS groups (
@@ -111,7 +118,7 @@ def set_active_group(group_number):
     conn.close()
 
 
-def register_user(name, face_encoding_list):
+def register_user(name, face_encoding_list, image_path=None):
     conn = get_db()
     cursor = conn.cursor()
 
@@ -134,9 +141,9 @@ def register_user(name, face_encoding_list):
     encoding_json = json.dumps(face_encoding_list)
 
     cursor.execute(
-        """INSERT INTO users (name, face_encoding, group_number, registered_at, status)
-           VALUES (?, ?, ?, ?, 'waiting')""",
-        (name, encoding_json, group_number, datetime.now().isoformat()),
+        """INSERT INTO users (name, face_encoding, image_path, group_number, registered_at, status)
+           VALUES (?, ?, ?, ?, ?, 'waiting')""",
+        (name, encoding_json, image_path, group_number, datetime.now().isoformat()),
     )
     user_id = cursor.lastrowid
     conn.commit()
