@@ -59,12 +59,32 @@
                     </div>
                     <div class="group-selector">
                         <label>Jump to Group:</label>
-                        <input type="number" id="group-input" min="0" max="35" value="1">
+                        <input type="number" id="group-input" min="0" max="100" value="1">
                         <button class="btn btn-set" onclick="setGroupFromInput()">Set</button>
                     </div>
                 </div>
 
+                <!-- Settings Panel -->
+                <div style="margin-top:15px; padding:15px; background:rgba(0,0,0,0.2); border-radius:10px; border:1px solid rgba(255,255,255,0.05);">
+                    <h3 style="color:#ffaa00; margin-bottom:10px;">⚙️ System Settings</h3>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                        <div>
+                            <label style="display:block; color:#6688aa; font-size:0.8rem; margin-bottom:4px;">Total Groups</label>
+                            <input type="number" id="cfg-groups" min="1" max="100" value="10"
+                                style="width:80px; padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#fff; text-align:center;">
+                        </div>
+                        <div>
+                            <label style="display:block; color:#6688aa; font-size:0.8rem; margin-bottom:4px;">Members per Group</label>
+                            <input type="number" id="cfg-members" min="1" max="500" value="15"
+                                style="width:80px; padding:8px; border-radius:6px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#fff; text-align:center;">
+                        </div>
+                        <button class="btn btn-set" onclick="saveConfig()">💾 Save</button>
+                    </div>
+                    <div id="config-msg" style="margin-top:8px; font-size:0.85rem; color:#00ff88; display:none;"></div>
+                </div>
+
                 <!-- Group Grid -->
+                <h3 style="margin-top:15px; color:#8899aa;">Group Overview</h3>
                 <div class="group-grid" id="group-grid">
                     <!-- Filled by JS -->
                 </div>
@@ -91,96 +111,122 @@
 
     <script>
         let currentActiveGroup = 0;
+        let totalGroups = 10;
 
         async function fetchStats() {
-            const res = await fetch('/api/stats');
-            const data = await res.json();
-            document.getElementById('stat-users').textContent = data.total_users;
-            document.getElementById('stat-active-group').textContent = data.active_group || '--';
-            document.getElementById('stat-entries').textContent = data.total_entries;
-            document.getElementById('stat-denied').textContent = data.total_denied;
-            document.getElementById('stat-groups').textContent = data.groups_with_members;
-            currentActiveGroup = data.active_group;
-            document.getElementById('current-group-display').textContent = 
-                data.active_group > 0 ? `Group ${data.active_group}` : 'None';
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                document.getElementById('stat-users').textContent = data.total_users;
+                document.getElementById('stat-active-group').textContent = data.active_group || '--';
+                document.getElementById('stat-entries').textContent = data.total_entries;
+                document.getElementById('stat-denied').textContent = data.total_denied;
+                document.getElementById('stat-groups').textContent = data.groups_with_members;
+                currentActiveGroup = data.active_group;
+                document.getElementById('current-group-display').textContent =
+                    data.active_group > 0 ? `Group ${data.active_group}` : 'None';
+                if (data.config) {
+                    totalGroups = data.config.total_groups;
+                    document.getElementById('cfg-groups').value = data.config.total_groups;
+                    document.getElementById('cfg-members').value = data.config.max_members;
+                }
+            } catch (e) {
+                console.error('Failed to fetch stats:', e);
+            }
         }
 
         async function fetchGroups() {
-            const res = await fetch('/api/groups');
-            const data = await res.json();
-            const grid = document.getElementById('group-grid');
-            grid.innerHTML = '';
-            
-            // Only show groups that have members
-            const activeGroups = data.groups.filter(g => g.member_count > 0);
-            
-            if (activeGroups.length === 0) {
-                grid.innerHTML = '<p class="empty-msg">No groups with members yet.</p>';
-                return;
-            }
+            try {
+                const res = await fetch('/api/groups');
+                const data = await res.json();
+                const grid = document.getElementById('group-grid');
+                grid.innerHTML = '';
 
-            activeGroups.forEach(g => {
-                const div = document.createElement('div');
-                div.className = `group-cell ${g.status === 'active' ? 'active' : ''} ${g.member_count > 0 ? 'has-members' : ''}`;
-                div.innerHTML = `
-                    <div class="group-num">G${g.group_number}</div>
-                    <div class="group-count">${g.member_count}/${g.max_members}</div>
-                    <div class="group-status">${g.status}</div>
-                `;
-                div.onclick = () => setGroup(g.group_number);
-                grid.appendChild(div);
-            });
+                const groups = data.groups;
+                if (groups.length === 0) {
+                    grid.innerHTML = '<p class="empty-msg">No groups configured.</p>';
+                    return;
+                }
+
+                groups.forEach(g => {
+                    const div = document.createElement('div');
+                    const isActive = g.status === 'active';
+                    const hasMembers = g.member_count > 0;
+                    div.className = `group-cell ${isActive ? 'active' : ''} ${hasMembers ? 'has-members' : ''}`;
+                    div.innerHTML = `
+                        <div class="group-num">G${g.group_number}</div>
+                        <div class="group-count">${g.member_count}/${g.max_members}</div>
+                        <div class="group-status">${isActive ? '▶ ACTIVE' : (hasMembers ? 'waiting' : 'empty')}</div>
+                    `;
+                    div.onclick = () => setGroup(g.group_number);
+                    grid.appendChild(div);
+                });
+            } catch (e) {
+                console.error('Failed to fetch groups:', e);
+            }
         }
 
         async function fetchUsers() {
-            const res = await fetch('/api/users');
-            const data = await res.json();
-            const list = document.getElementById('user-list');
-            
-            if (data.users.length === 0) {
-                list.innerHTML = '<p class="empty-msg">No users registered yet. <a href="/register">Register now</a></p>';
-                return;
-            }
+            try {
+                const res = await fetch('/api/users');
+                const data = await res.json();
+                const list = document.getElementById('user-list');
 
-            list.innerHTML = data.users.map(u => `
-                <div class="user-item ${u.group_number === currentActiveGroup ? 'active-user' : ''}">
-                    <span class="user-name">👤 ${u.name}</span>
-                    <span class="user-group">Group ${u.group_number}</span>
-                    <span class="user-status ${u.group_number === currentActiveGroup ? 'status-active' : 'status-waiting'}">
-                        ${u.group_number === currentActiveGroup ? '✅ ACTIVE' : '⏳ Waiting'}
-                    </span>
-                </div>
-            `).join('');
+                if (data.users.length === 0) {
+                    list.innerHTML = '<p class="empty-msg">No users registered yet. <a href="/register">Register now</a></p>';
+                    return;
+                }
+
+                list.innerHTML = data.users.map(u => `
+                    <div class="user-item ${u.group_number === currentActiveGroup ? 'active-user' : ''}">
+                        <span class="user-name">👤 ${u.name}</span>
+                        <span class="user-group">Group ${u.group_number}</span>
+                        <span class="user-status ${u.group_number === currentActiveGroup ? 'status-active' : 'status-waiting'}">
+                            ${u.group_number === currentActiveGroup ? '✅ ACTIVE' : '⏳ Waiting'}
+                        </span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to fetch users:', e);
+            }
         }
 
         async function fetchLogs() {
-            const res = await fetch('/api/gate_logs');
-            const data = await res.json();
-            const list = document.getElementById('gate-log');
-            
-            if (data.logs.length === 0) {
-                list.innerHTML = '<p class="empty-msg">No gate events yet.</p>';
-                return;
-            }
+            try {
+                const res = await fetch('/api/gate_logs');
+                const data = await res.json();
+                const list = document.getElementById('gate-log');
 
-            list.innerHTML = data.logs.slice(0, 20).map(l => `
-                <div class="log-item ${l.result}">
-                    <span class="log-icon">${l.result === 'granted' ? '✅' : '❌'}</span>
-                    <span class="log-name">${l.user_name || 'Unknown'}</span>
-                    <span class="log-group">${l.group_number ? 'G' + l.group_number : '--'}</span>
-                    <span class="log-result">${l.result.toUpperCase()}</span>
-                    <span class="log-time">${new Date(l.timestamp).toLocaleTimeString()}</span>
-                </div>
-            `).join('');
+                if (data.logs.length === 0) {
+                    list.innerHTML = '<p class="empty-msg">No gate events yet.</p>';
+                    return;
+                }
+
+                list.innerHTML = data.logs.slice(0, 20).map(l => `
+                    <div class="log-item ${l.result}">
+                        <span class="log-icon">${l.result === 'granted' ? '✅' : '❌'}</span>
+                        <span class="log-name">${l.user_name || 'Unknown'}</span>
+                        <span class="log-group">${l.group_number ? 'G' + l.group_number : '--'}</span>
+                        <span class="log-result">${l.result.toUpperCase()}</span>
+                        <span class="log-time">${new Date(l.timestamp).toLocaleTimeString()}</span>
+                    </div>
+                `).join('');
+            } catch (e) {
+                console.error('Failed to fetch logs:', e);
+            }
         }
 
         async function setGroup(num) {
-            await fetch('/api/set_active_group', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({group_number: num})
-            });
-            refreshAll();
+            try {
+                await fetch('/api/set_active_group', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({group_number: num})
+                });
+                refreshAll();
+            } catch (e) {
+                alert('Failed to set group: ' + e.message);
+            }
         }
 
         function setGroupFromInput() {
@@ -190,15 +236,49 @@
 
         function changeGroup(delta) {
             let newGroup = currentActiveGroup + delta;
-            if (newGroup < 0) newGroup = 35;
-            if (newGroup > 35) newGroup = 0;
+            if (newGroup < 0) newGroup = totalGroups;
+            if (newGroup > totalGroups) newGroup = 0;
             setGroup(newGroup);
+        }
+
+        async function saveConfig() {
+            const tg = parseInt(document.getElementById('cfg-groups').value);
+            const mm = parseInt(document.getElementById('cfg-members').value);
+            if (!tg || tg < 1 || !mm || mm < 1) {
+                alert('Enter valid numbers (minimum 1)');
+                return;
+            }
+            try {
+                const res = await fetch('/api/configure', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({total_groups: tg, max_members: mm})
+                });
+                const data = await res.json();
+                const msgEl = document.getElementById('config-msg');
+                if (data.success) {
+                    msgEl.style.color = '#00ff88';
+                    msgEl.textContent = '✅ ' + data.message;
+                } else {
+                    msgEl.style.color = '#ff4444';
+                    msgEl.textContent = '❌ ' + data.error;
+                }
+                msgEl.style.display = 'block';
+                setTimeout(() => { msgEl.style.display = 'none'; }, 3000);
+                refreshAll();
+            } catch (e) {
+                alert('Failed to save config: ' + e.message);
+            }
         }
 
         async function resetSystem() {
             if (!confirm('Reset all users, groups, and logs? This cannot be undone.')) return;
-            await fetch('/api/reset', {method: 'POST'});
-            refreshAll();
+            try {
+                await fetch('/api/reset', {method: 'POST'});
+                refreshAll();
+            } catch (e) {
+                alert('Reset failed: ' + e.message);
+            }
         }
 
         function refreshAll() {
@@ -208,7 +288,6 @@
             fetchLogs();
         }
 
-        // Initial load + auto-refresh every 2 seconds
         refreshAll();
         setInterval(refreshAll, 2000);
     </script>

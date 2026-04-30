@@ -45,6 +45,14 @@
                         <span class="group-display" id="active-group-display">--</span>
                     </div>
                 </div>
+
+                <!-- Group Queue Display -->
+                <div style="margin-top:15px;">
+                    <h3 style="color:#8899aa; margin-bottom:8px;">📋 Group Queue</h3>
+                    <div id="gate-group-queue" style="display:flex; flex-wrap:wrap; gap:6px;">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
             </section>
 
             <!-- Gate Status -->
@@ -262,9 +270,32 @@
             try {
                 const res = await fetch(`${API_BASE_URL}/api/stats`);
                 const data = await res.json();
-                document.getElementById('active-group-display').textContent = 
-                    data.active_group > 0 ? `Group ${data.active_group}` : 'None';
-            } catch (e) {}
+                const ag = data.active_group;
+                document.getElementById('active-group-display').textContent =
+                    ag > 0 ? `Group ${ag}` : 'None';
+
+                const gRes = await fetch(`${API_BASE_URL}/api/groups`);
+                const gData = await gRes.json();
+                const queueDiv = document.getElementById('gate-group-queue');
+                const groups = gData.groups.filter(g => g.member_count > 0);
+                if (groups.length === 0) {
+                    queueDiv.innerHTML = '<span style="color:#556677; font-size:0.85rem;">No groups with members</span>';
+                } else {
+                    queueDiv.innerHTML = groups.map(g => {
+                        const isActive = g.status === 'active';
+                        const bg = isActive ? 'rgba(0,255,136,0.15)' : 'rgba(255,255,255,0.05)';
+                        const border = isActive ? '#00ff88' : 'rgba(255,255,255,0.1)';
+                        const color = isActive ? '#00ff88' : '#8899aa';
+                        return `<div style="padding:6px 12px; border-radius:6px; background:${bg}; border:1px solid ${border}; text-align:center; min-width:60px;">
+                            <div style="font-weight:700; color:${color}; font-size:0.9rem;">G${g.group_number}</div>
+                            <div style="font-size:0.7rem; color:#556677;">${g.member_count} ppl</div>
+                            <div style="font-size:0.65rem; color:${isActive ? '#00ff88' : '#445566'};">${isActive ? '▶ RUNNING' : 'waiting'}</div>
+                        </div>`;
+                    }).join('');
+                }
+            } catch (e) {
+                console.error('Failed to update gate info:', e);
+            }
         }
 
         updateActiveGroup();

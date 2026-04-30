@@ -145,9 +145,10 @@ async def api_set_active_group(request: Request):
     """Set the currently active group."""
     data = await request.json()
     group_number = data.get("group_number", 0)
+    config = db.get_config()
 
-    if not isinstance(group_number, int) or group_number < 0 or group_number > 35:
-        return JSONResponse({"error": "Invalid group number (0-35)"}, status_code=400)
+    if not isinstance(group_number, int) or group_number < 0 or group_number > config["total_groups"]:
+        return JSONResponse({"error": f"Invalid group number (0-{config['total_groups']})"}, status_code=400)
 
     db.set_active_group(group_number)
     return JSONResponse({
@@ -229,13 +230,41 @@ async def api_verify(request: Request):
 @app.get("/api/stats")
 async def api_stats():
     """Get system statistics."""
-    return JSONResponse(db.get_system_stats())
+    stats = db.get_system_stats()
+    stats["config"] = db.get_config()
+    return JSONResponse(stats)
 
 
 @app.get("/api/gate_logs")
 async def api_gate_logs():
     """Get gate access logs."""
     return JSONResponse({"logs": db.get_gate_logs()})
+
+
+@app.post("/api/configure")
+async def api_configure(request: Request):
+    """Configure the number of groups and max members per group."""
+    data = await request.json()
+    total_groups = data.get("total_groups")
+    max_members = data.get("max_members")
+
+    if total_groups is not None:
+        if not isinstance(total_groups, int) or total_groups < 1 or total_groups > 100:
+            return JSONResponse({"error": "total_groups must be 1-100"}, status_code=400)
+    if max_members is not None:
+        if not isinstance(max_members, int) or max_members < 1 or max_members > 500:
+            return JSONResponse({"error": "max_members must be 1-500"}, status_code=400)
+
+    config = db.get_config()
+    tg = total_groups if total_groups is not None else config["total_groups"]
+    mm = max_members if max_members is not None else config["max_members"]
+    db.update_config(tg, mm)
+
+    return JSONResponse({
+        "success": True,
+        "config": {"total_groups": tg, "max_members": mm},
+        "message": f"Updated: {tg} groups, {mm} members per group",
+    })
 
 
 @app.post("/api/reset")

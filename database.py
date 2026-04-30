@@ -68,14 +68,7 @@ def init_db():
         )
     """)
 
-    # Initialize groups (1-35 as per freedom.md spec)
-    for g in range(1, 36):
-        cursor.execute(
-            "INSERT OR IGNORE INTO groups (group_number, status) VALUES (?, 'waiting')",
-            (g,),
-        )
-
-    # Initialize system config
+    # Initialize system config with defaults
     cursor.execute(
         "INSERT OR IGNORE INTO system_config (key, value) VALUES ('active_group', '0')"
     )
@@ -85,6 +78,25 @@ def init_db():
     cursor.execute(
         "INSERT OR IGNORE INTO system_config (key, value) VALUES ('system_mode', 'running')"
     )
+    cursor.execute(
+        "INSERT OR IGNORE INTO system_config (key, value) VALUES ('total_groups', '10')"
+    )
+    cursor.execute(
+        "INSERT OR IGNORE INTO system_config (key, value) VALUES ('max_members', '15')"
+    )
+
+    # Initialize groups based on config
+    total_groups = int(cursor.execute(
+        "SELECT value FROM system_config WHERE key = 'total_groups'"
+    ).fetchone()["value"])
+    max_members = int(cursor.execute(
+        "SELECT value FROM system_config WHERE key = 'max_members'"
+    ).fetchone()["value"])
+    for g in range(1, total_groups + 1):
+        cursor.execute(
+            "INSERT OR IGNORE INTO groups (group_number, max_members, status) VALUES (?, ?, 'waiting')",
+            (g, max_members),
+        )
 
     conn.commit()
     conn.close()
@@ -244,6 +256,47 @@ def get_system_stats():
         "total_denied": total_denied,
         "groups_with_members": groups_with_members,
     }
+
+
+def get_config():
+    """Get all system configuration values."""
+    conn = get_db()
+    total_groups = int(conn.execute(
+        "SELECT value FROM system_config WHERE key = 'total_groups'"
+    ).fetchone()["value"])
+    max_members = int(conn.execute(
+        "SELECT value FROM system_config WHERE key = 'max_members'"
+    ).fetchone()["value"])
+    conn.close()
+    return {"total_groups": total_groups, "max_members": max_members}
+
+
+def update_config(total_groups, max_members):
+    """Update group count and member limit, rebuild group table."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE system_config SET value = ? WHERE key = 'total_groups'",
+        (str(total_groups),),
+    )
+    cursor.execute(
+        "UPDATE system_config SET value = ? WHERE key = 'max_members'",
+        (str(max_members),),
+    )
+    # Remove groups beyond the new count (but keep users)
+    cursor.execute("DELETE FROM groups WHERE group_number > ?", (total_groups,))
+    # Ensure all groups up to total_groups exist and update max_members
+    for g in range(1, total_groups + 1):
+        cursor.execute(
+            "INSERT OR IGNORE INTO groups (group_number, max_members, status) VALUES (?, ?, 'waiting')",
+            (g, max_members),
+        )
+        cursor.execute(
+            "UPDATE groups SET max_members = ? WHERE group_number = ?",
+            (max_members, g),
+        )
+    conn.commit()
+    conn.close()
 
 
 def reset_system():
