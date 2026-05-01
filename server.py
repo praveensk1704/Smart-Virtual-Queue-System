@@ -121,36 +121,13 @@ def validate_name(name: str) -> str | None:
     return None
 
 # Allow requests from GitHub Pages, local dev, and Cloudflare tunnels
-ALLOWED_ORIGINS = [
-    "https://praveensk1704.github.io",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-]
-
-# Also allow Cloudflare tunnel origins
-from starlette.middleware.base import BaseHTTPMiddleware
-
-class DynamicCORSMiddleware(BaseHTTPMiddleware):
-    """Allow Cloudflare tunnel origins dynamically."""
-    async def dispatch(self, request, call_next):
-        origin = request.headers.get("origin", "")
-        response = await call_next(request)
-        if origin:
-            is_allowed = any(origin.startswith(o) for o in ALLOWED_ORIGINS)
-            is_cloudflare = origin.endswith(".trycloudflare.com")
-            if is_allowed or is_cloudflare:
-                response.headers["Access-Control-Allow-Origin"] = origin
-                response.headers["Access-Control-Allow-Credentials"] = "true"
-                response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-                response.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Admin-Token"
-        return response
-
-app.add_middleware(DynamicCORSMiddleware)
-
-# Standard CORS for preflight (OPTIONS) requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=[
+        "https://praveensk1704.github.io",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ],
     allow_origin_regex=r"https://.*\.trycloudflare\.com",
     allow_credentials=True,
     allow_methods=["GET", "POST"],
