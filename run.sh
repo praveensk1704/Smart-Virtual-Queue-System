@@ -55,6 +55,9 @@ echo "  Local: http://localhost:8000"
 echo "============================================================"
 echo ""
 
+# Kill any existing process on port 8000
+fuser -k 8000/tcp 2>/dev/null && echo "🔄 Freed port 8000 (killed old process)" && sleep 1
+
 # Start FastAPI server in background
 python3 server.py &
 SERVER_PID=$!
@@ -99,6 +102,17 @@ echo ""
 echo "  Press Ctrl+C to stop"
 echo ""
 
+# Cleanup function
+cleanup() {
+    echo ""
+    echo "🛑 Shutting down..."
+    kill $SERVER_PID 2>/dev/null
+    kill $CF_PID 2>/dev/null
+    fuser -k 8000/tcp 2>/dev/null
+    echo "✅ Server stopped. All processes cleaned up."
+    exit 0
+}
+
 # Keep running until Ctrl+C
-trap "kill $SERVER_PID $CF_PID 2>/dev/null; echo 'Server stopped.'; exit 0" INT TERM
+trap cleanup INT TERM
 wait $SERVER_PID

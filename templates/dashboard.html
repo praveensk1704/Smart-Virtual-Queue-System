@@ -22,6 +22,25 @@
     </header>
 
     <main>
+        <!-- Login Wall -->
+        <div id="login-wall" style="max-width:400px; margin:80px auto; text-align:center;">
+            <div class="panel" style="padding:40px;">
+                <h2 style="margin-bottom:20px;">🔐 Admin Login</h2>
+                <p class="subtitle">Dashboard access is restricted to admin only.</p>
+                <div class="form-group">
+                    <input type="password" id="admin-password" placeholder="Enter admin password"
+                        style="width:100%; padding:14px; border-radius:10px; border:1px solid rgba(255,255,255,0.15); background:rgba(255,255,255,0.05); color:#fff; font-size:1rem; text-align:center;"
+                        onkeydown="if(event.key==='Enter') adminLogin()">
+                </div>
+                <button class="btn btn-register" onclick="adminLogin()" style="width:100%; margin-top:10px;">
+                    🔓 Login
+                </button>
+                <div id="login-error" style="color:#ff4444; margin-top:12px; display:none;"></div>
+            </div>
+        </div>
+
+        <!-- Dashboard Content (hidden until login) -->
+        <div id="dashboard-content" style="display:none;">
         <!-- Stats Cards -->
         <section class="stats-row" id="stats-row">
             <div class="stat-card">
@@ -107,14 +126,72 @@
 
                 <div style="margin-top:15px; text-align:right;">
                     <button class="btn btn-danger" onclick="resetSystem()">🗑️ Reset System</button>
+                    <button class="btn" onclick="adminLogout()" style="margin-left:10px; border-color:#ffaa00; color:#ffaa00;">🔒 Logout</button>
                 </div>
             </section>
         </div>
+        </div> <!-- end dashboard-content -->
     </main>
 
     <script>
         let currentActiveGroup = 0;
         let totalGroups = 10;
+        let adminToken = sessionStorage.getItem('adminToken') || '';
+
+        function adminHeaders() {
+            return { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken };
+        }
+
+        async function adminLogin() {
+            const pw = document.getElementById('admin-password').value;
+            if (!pw) return;
+            try {
+                const res = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: pw})
+                });
+                const data = await res.json();
+                if (data.success) {
+                    adminToken = data.token;
+                    sessionStorage.setItem('adminToken', adminToken);
+                    showDashboard();
+                } else {
+                    const errEl = document.getElementById('login-error');
+                    errEl.textContent = data.error || 'Login failed';
+                    errEl.style.display = 'block';
+                }
+            } catch (e) {
+                document.getElementById('login-error').textContent = 'Connection error';
+                document.getElementById('login-error').style.display = 'block';
+            }
+        }
+
+        function adminLogout() {
+            adminToken = '';
+            sessionStorage.removeItem('adminToken');
+            document.getElementById('dashboard-content').style.display = 'none';
+            document.getElementById('login-wall').style.display = 'block';
+        }
+
+        function showDashboard() {
+            document.getElementById('login-wall').style.display = 'none';
+            document.getElementById('dashboard-content').style.display = 'block';
+            refreshAll();
+        }
+
+        // Auto-check saved token on page load
+        (async function checkAuth() {
+            if (adminToken) {
+                try {
+                    const res = await fetch('/api/admin/check', { headers: { 'X-Admin-Token': adminToken } });
+                    const data = await res.json();
+                    if (data.authenticated) { showDashboard(); return; }
+                } catch (e) {}
+                adminToken = '';
+                sessionStorage.removeItem('adminToken');
+            }
+        })();
 
         async function fetchStats() {
             try {
@@ -221,11 +298,13 @@
 
         async function setGroup(num) {
             try {
-                await fetch('/api/set_active_group', {
+                const res = await fetch('/api/set_active_group', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: adminHeaders(),
                     body: JSON.stringify({group_number: num})
                 });
+                const data = await res.json();
+                if (res.status === 401) { adminLogout(); alert('Session expired. Please login again.'); return; }
                 refreshAll();
             } catch (e) {
                 alert('Failed to set group: ' + e.message);
@@ -254,9 +333,10 @@
             try {
                 const res = await fetch('/api/configure', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: adminHeaders(),
                     body: JSON.stringify({total_groups: tg, max_members: mm})
                 });
+                if (res.status === 401) { adminLogout(); alert('Session expired.'); return; }
                 const data = await res.json();
                 const msgEl = document.getElementById('config-msg');
                 if (data.success) {
@@ -277,7 +357,8 @@
         async function resetSystem() {
             if (!confirm('Reset all users, groups, and logs? This cannot be undone.')) return;
             try {
-                await fetch('/api/reset', {method: 'POST'});
+                const res = await fetch('/api/reset', {method: 'POST', headers: adminHeaders()});
+                if (res.status === 401) { adminLogout(); alert('Session expired.'); return; }
                 refreshAll();
             } catch (e) {
                 alert('Reset failed: ' + e.message);

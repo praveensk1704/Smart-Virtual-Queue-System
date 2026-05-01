@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
+# Database
+*.db
+
+# Admin credentials
+.admin_password
+
+# Face images (sensitive data)
+face_images/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Cloudflare tunnel logs
+/tmp/cf_tunnel.log
