@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 </head>
 <body>
     <header>
@@ -149,7 +150,30 @@
                         <p><strong>User ID:</strong> ${data.user.user_id}</p>
                         <p><strong>Assigned Group:</strong> Group ${data.user.group_number}</p>
                         <p class="msg">${data.message}</p>
+                        <div id="qr-section" style="margin-top:15px; text-align:center;">
+                            <p style="color:#00d4ff; font-size:0.85rem; margin-bottom:8px;">📱 Your Entry QR Ticket:</p>
+                            <canvas id="qr-canvas" style="border-radius:12px; background:#fff; padding:10px;"></canvas>
+                            <br>
+                            <button onclick="downloadQR()" class="btn" style="margin-top:10px; border-color:#00d4ff; color:#00d4ff;">
+                                ⬇️ Download QR Ticket
+                            </button>
+                        </div>
                     `;
+                    // Generate QR code
+                    const qrData = JSON.stringify({
+                        id: data.user.user_id,
+                        name: data.user.name,
+                        group: data.user.group_number,
+                        ts: Date.now()
+                    });
+                    QRCode.toCanvas(document.getElementById('qr-canvas'), qrData, {
+                        width: 200,
+                        margin: 2,
+                        color: { dark: '#0f1923', light: '#ffffff' }
+                    });
+                    // Subscribe for push notifications
+                    subscribeForNotifications(data.user.group_number, data.user.name);
+
                     document.getElementById('user-name').value = '';
                     capturedImage = null;
                     document.getElementById('captured-preview').innerHTML = '<p class="empty-msg">No photo captured yet</p>';
@@ -165,6 +189,68 @@
             resultBox.style.display = 'block';
             btn.disabled = false;
             btn.textContent = '✅ Register User';
+        }
+
+        function downloadQR() {
+            const canvas = document.getElementById('qr-canvas');
+            if (!canvas) return;
+            // Create a larger ticket image with info
+            const ticket = document.createElement('canvas');
+            ticket.width = 300;
+            ticket.height = 420;
+            const ctx = ticket.getContext('2d');
+            // Background
+            ctx.fillStyle = '#0f1923';
+            ctx.fillRect(0, 0, 300, 420);
+            // Border
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 2;
+            ctx.roundRect(10, 10, 280, 400, 15);
+            ctx.stroke();
+            // Title
+            ctx.fillStyle = '#00d4ff';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🚦 SMART VIRTUAL QUEUE', 150, 45);
+            ctx.font = '12px sans-serif';
+            ctx.fillStyle = '#8899aa';
+            ctx.fillText('ENTRY TICKET', 150, 65);
+            // QR code
+            ctx.drawImage(canvas, 50, 80, 200, 200);
+            // Info
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px sans-serif';
+            const nameEl = document.querySelector('.result-box.success p:nth-child(2)');
+            const groupEl = document.querySelector('.result-box.success p:nth-child(4)');
+            if (nameEl) ctx.fillText(nameEl.textContent, 150, 310);
+            if (groupEl) ctx.fillText(groupEl.textContent, 150, 335);
+            ctx.fillStyle = '#6688aa';
+            ctx.font = '10px sans-serif';
+            ctx.fillText('Show this QR code at the gate', 150, 365);
+            ctx.fillText(new Date().toLocaleString(), 150, 385);
+            // Download
+            const link = document.createElement('a');
+            link.download = 'queue-ticket.png';
+            link.href = ticket.toDataURL('image/png');
+            link.click();
+        }
+
+        // ── Push Notification Subscription ──
+        async function subscribeForNotifications(groupNumber, userName) {
+            if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') return;
+                // Register service worker
+                const reg = await navigator.serviceWorker.register('sw.js');
+                // Save subscription info locally
+                const subs = JSON.parse(localStorage.getItem('queue_subscriptions') || '[]');
+                subs.push({ group: groupNumber, name: userName, time: Date.now() });
+                localStorage.setItem('queue_subscriptions', JSON.stringify(subs));
+                console.log('Notification subscription saved for Group', groupNumber);
+            } catch (e) {
+                console.log('Push notification setup skipped:', e.message);
+            }
         }
     </script>
 </body>

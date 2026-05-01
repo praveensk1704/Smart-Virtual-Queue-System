@@ -110,6 +110,46 @@
                 </div>
             </section>
         </div>
+
+        <!-- Wait Time Countdown Section -->
+        <section class="panel" style="margin-top:20px;">
+            <h2>⏱️ Estimated Wait Times</h2>
+            <div style="display:flex; align-items:center; gap:15px; margin-bottom:15px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:200px;">
+                    <label style="display:block; color:#4a6280; font-size:0.75rem; margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">Minutes per Group</label>
+                    <input type="number" id="mins-per-group" min="1" max="60" value="5"
+                        style="width:80px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); color:#fff; text-align:center; font-size:1rem;">
+                </div>
+                <div style="text-align:center; padding:15px 25px; background:rgba(0,212,255,0.05); border:1px solid rgba(0,212,255,0.2); border-radius:12px;">
+                    <div style="color:#4a6280; font-size:0.75rem; text-transform:uppercase; letter-spacing:1px;">Total Est. Time</div>
+                    <div id="total-est-time" style="font-size:1.8rem; font-weight:700; color:#00d4ff;">--</div>
+                </div>
+            </div>
+            <div id="wait-time-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px;">
+                <!-- Filled by JS -->
+            </div>
+        </section>
+
+        <!-- Auto-Advance Timer Section -->
+        <section class="panel" style="margin-top:20px;">
+            <h2>🤖 Auto-Advance Timer</h2>
+            <p class="subtitle">Automatically move to the next group after a set time. Full autopilot mode.</p>
+            <div style="display:flex; align-items:center; gap:15px; flex-wrap:wrap;">
+                <div>
+                    <label style="display:block; color:#4a6280; font-size:0.75rem; margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:1px;">Interval (seconds)</label>
+                    <input type="number" id="auto-interval" min="5" max="3600" value="300"
+                        style="width:100px; padding:10px; border-radius:12px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.03); color:#fff; text-align:center; font-size:1rem;">
+                </div>
+                <button class="btn" id="btn-auto-start" onclick="toggleAutoAdvance()" style="border-color:#00ff88; color:#00ff88; font-size:1rem; padding:12px 24px;">
+                    ▶️ Start Auto-Advance
+                </button>
+                <div id="auto-status" style="padding:10px 20px; border-radius:12px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); min-width:180px; text-align:center;">
+                    <div style="color:#4a6280; font-size:0.7rem; text-transform:uppercase; letter-spacing:1px;">Next Advance In</div>
+                    <div id="auto-countdown" style="font-size:2rem; font-weight:700; color:#ffaa00;">OFF</div>
+                </div>
+            </div>
+            <div id="auto-log" style="margin-top:12px; max-height:100px; overflow-y:auto; font-size:0.8rem; color:#6688aa;"></div>
+        </section>
     </main>
 
     <script>
@@ -307,10 +347,190 @@
             fetchGroups();
             fetchUsers();
             fetchLogs();
+            updateWaitTimes();
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // FEATURE: Wait Time Countdown
+        // ═══════════════════════════════════════════════════════════
+        function updateWaitTimes() {
+            const minsPerGroup = parseInt(document.getElementById('mins-per-group').value) || 5;
+            const grid = document.getElementById('wait-time-grid');
+            // Find groups that have members (from the group grid)
+            const groupCells = document.querySelectorAll('#group-grid .group-cell');
+            const groups = [];
+            groupCells.forEach(cell => {
+                const numText = cell.querySelector('.group-num')?.textContent || '';
+                const gNum = parseInt(numText.replace('G', ''));
+                const isActive = cell.classList.contains('active');
+                if (!isNaN(gNum)) groups.push({ num: gNum, active: isActive });
+            });
+
+            if (groups.length === 0) {
+                grid.innerHTML = '<p class="empty-msg">No groups to show wait times for.</p>';
+                document.getElementById('total-est-time').textContent = '--';
+                return;
+            }
+
+            const activeIdx = groups.findIndex(g => g.active);
+            const totalMins = groups.length * minsPerGroup;
+            document.getElementById('total-est-time').textContent = `${totalMins} min`;
+
+            grid.innerHTML = groups.map((g, i) => {
+                let waitMins = 0;
+                let status = '';
+                let color = '#ffaa00';
+                if (g.active) {
+                    status = '🟢 NOW SERVING';
+                    color = '#00ff88';
+                    waitMins = 0;
+                } else if (activeIdx >= 0 && i > activeIdx) {
+                    waitMins = (i - activeIdx) * minsPerGroup;
+                    status = `⏳ ~${waitMins} min`;
+                } else if (activeIdx >= 0 && i < activeIdx) {
+                    status = '✅ Completed';
+                    color = '#556677';
+                    waitMins = -1;
+                } else {
+                    waitMins = i * minsPerGroup;
+                    status = `⏳ ~${waitMins} min`;
+                }
+                const bg = g.active ? 'rgba(0,255,136,0.1)' : 'rgba(255,255,255,0.03)';
+                const border = g.active ? '#00ff88' : 'rgba(255,255,255,0.08)';
+                return `<div style="padding:12px; border-radius:10px; background:${bg}; border:1px solid ${border}; text-align:center;">
+                    <div style="font-weight:700; font-size:1.1rem; color:${color};">Group ${g.num}</div>
+                    <div style="font-size:0.85rem; color:${color}; margin-top:4px;">${status}</div>
+                </div>`;
+            }).join('');
+        }
+
+        document.getElementById('mins-per-group').addEventListener('input', updateWaitTimes);
+
+        // ═══════════════════════════════════════════════════════════
+        // FEATURE: Auto-Advance Timer
+        // ═══════════════════════════════════════════════════════════
+        let autoAdvanceTimer = null;
+        let autoCountdownTimer = null;
+        let autoSecondsLeft = 0;
+
+        function toggleAutoAdvance() {
+            if (autoAdvanceTimer) {
+                stopAutoAdvance();
+            } else {
+                startAutoAdvance();
+            }
+        }
+
+        function startAutoAdvance() {
+            const interval = parseInt(document.getElementById('auto-interval').value) || 300;
+            autoSecondsLeft = interval;
+            const btn = document.getElementById('btn-auto-start');
+            btn.textContent = '⏹️ Stop Auto-Advance';
+            btn.style.borderColor = '#ff4444';
+            btn.style.color = '#ff4444';
+            addAutoLog('Auto-advance started. Interval: ' + interval + 's');
+
+            // Countdown display
+            autoCountdownTimer = setInterval(() => {
+                autoSecondsLeft--;
+                const m = Math.floor(autoSecondsLeft / 60);
+                const s = autoSecondsLeft % 60;
+                document.getElementById('auto-countdown').textContent =
+                    `${m}:${s.toString().padStart(2, '0')}`;
+                document.getElementById('auto-countdown').style.color =
+                    autoSecondsLeft <= 10 ? '#ff4444' : '#ffaa00';
+                if (autoSecondsLeft <= 0) autoSecondsLeft = interval;
+            }, 1000);
+
+            // Advance group
+            autoAdvanceTimer = setInterval(async () => {
+                autoSecondsLeft = interval;
+                await advanceToNextGroup();
+            }, interval * 1000);
+
+            // Send notification about current group being active
+            sendGroupNotification(currentActiveGroup);
+        }
+
+        function stopAutoAdvance() {
+            clearInterval(autoAdvanceTimer);
+            clearInterval(autoCountdownTimer);
+            autoAdvanceTimer = null;
+            autoCountdownTimer = null;
+            document.getElementById('auto-countdown').textContent = 'OFF';
+            document.getElementById('auto-countdown').style.color = '#ffaa00';
+            const btn = document.getElementById('btn-auto-start');
+            btn.textContent = '▶️ Start Auto-Advance';
+            btn.style.borderColor = '#00ff88';
+            btn.style.color = '#00ff88';
+            addAutoLog('Auto-advance stopped.');
+        }
+
+        async function advanceToNextGroup() {
+            let nextGroup = currentActiveGroup + 1;
+            if (nextGroup > totalGroups) nextGroup = 1;
+            addAutoLog(`Auto-advancing: Group ${currentActiveGroup} → Group ${nextGroup}`);
+            await setGroup(nextGroup);
+            sendGroupNotification(nextGroup);
+        }
+
+        function addAutoLog(msg) {
+            const logDiv = document.getElementById('auto-log');
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML = `<div style="margin-bottom:3px;">🤖 [${time}] ${msg}</div>` + logDiv.innerHTML;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // FEATURE: Browser Push Notifications
+        // ═══════════════════════════════════════════════════════════
+        let lastNotifiedGroup = 0;
+
+        function sendGroupNotification(groupNumber) {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            if (groupNumber === lastNotifiedGroup || groupNumber <= 0) return;
+            lastNotifiedGroup = groupNumber;
+
+            // Check if user is subscribed to this group
+            const subs = JSON.parse(localStorage.getItem('queue_subscriptions') || '[]');
+            const myGroups = subs.map(s => s.group);
+
+            if (myGroups.includes(groupNumber)) {
+                new Notification('🚦 Your Group Is Called!', {
+                    body: `Group ${groupNumber} is NOW ACTIVE! Please proceed to the gate.`,
+                    icon: '🚦',
+                    tag: 'group-' + groupNumber,
+                    requireInteraction: true
+                });
+            }
+
+            // Also notify next group as "get ready"
+            if (myGroups.includes(groupNumber + 1)) {
+                setTimeout(() => {
+                    new Notification('⏳ Get Ready!', {
+                        body: `Group ${groupNumber + 1} — you're NEXT! Current: Group ${groupNumber}`,
+                        tag: 'ready-' + (groupNumber + 1)
+                    });
+                }, 2000);
+            }
+        }
+
+        // Check for notifications on every refresh
+        function checkNotifications() {
+            if (currentActiveGroup > 0) {
+                sendGroupNotification(currentActiveGroup);
+            }
+        }
+
+        // Request notification permission on page load
+        if ('Notification' in window && Notification.permission === 'default') {
+            document.addEventListener('click', function askOnce() {
+                Notification.requestPermission();
+                document.removeEventListener('click', askOnce);
+            }, { once: true });
         }
 
         refreshAll();
-        setInterval(refreshAll, 2000);
+        setInterval(() => { refreshAll(); checkNotifications(); }, 2000);
     </script>
 </body>
 </html>
